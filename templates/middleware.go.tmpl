@@ -1,0 +1,65 @@
+package stripe
+
+import (
+	"errors"
+	"net/http"
+	"slices"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/labstack/echo/v4"
+
+	"{{.Module}}/internal/auth"
+	dbgen "{{.Module}}/internal/db/gen"
+)
+
+const subscriptionContextKey = "stripe.subscription"
+
+// ActiveStatuses are the subscription statuses that unlock paid features.
+// Add "past_due" for a grace period while Stripe retries a failed payment.
+var ActiveStatuses = []string{"active", "trialing"}
+
+// RequireSubscription rejects requests whose user has no active (or
+// trialing) subscription with 402 Payment Required. Chain it after auth:
+//
+//	paid := api.Group("", auth.Require, stripe.RequireSubscription(q))
+//	paid.GET("/reports", reports.Export)
+func RequireSubscription(q *dbgen.Queries) echo.MiddlewareFunc {
+	return RequirePrice(q)
+}
+
+// RequirePrice is RequireSubscription narrowed to specific Stripe price IDs
+// — gate a route on the tiers that include the feature:
+//
+//	pro := api.Group("", auth.Require, stripe.RequirePrice(q, os.Getenv("STRIPE_PRICE_PRO")))
+func RequirePrice(q *dbgen.Queries, priceIDs ...string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			user := auth.CurrentUser(c)
+			if user == nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+			}
+			sub, err := q.GetSubscriptionByUserID(c.Request().Context(), user.ID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return echo.NewHTTPError(http.StatusPaymentRequired, "active subscription required")
+			}
+			if err != nil {
+				return err
+			}
+			if !slices.Contains(ActiveStatuses, sub.Status) {
+				return echo.NewHTTPError(http.StatusPaymentRequired, "active subscription required")
+			}
+			if len(priceIDs) > 0 && (sub.PriceID == nil || !slices.Contains(priceIDs, *sub.PriceID)) {
+				return echo.NewHTTPError(http.StatusPaymentRequired, "your plan does not include this feature")
+			}
+			c.Set(subscriptionContextKey, &sub)
+			return next(c)
+		}
+	}
+}
+
+// CurrentSubscription returns the row loaded by RequireSubscription or
+// RequirePrice, or nil outside those middlewares.
+func CurrentSubscription(c echo.Context) *dbgen.Subscription {
+	sub, _ := c.Get(subscriptionContextKey).(*dbgen.Subscription)
+	return sub
+}

@@ -1,0 +1,21 @@
+-- name: GetSubscriptionByUserID :one
+SELECT * FROM subscriptions
+WHERE user_id = $1;
+
+-- name: UpsertSubscriptionCustomer :one
+INSERT INTO subscriptions (user_id, stripe_customer_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE
+SET stripe_customer_id = EXCLUDED.stripe_customer_id, updated_at = now()
+RETURNING *;
+
+-- name: SyncSubscription :one
+UPDATE subscriptions
+SET stripe_subscription_id = $2,
+    status = $3,
+    price_id = $4,
+    current_period_end = $5,
+    cancel_at_period_end = $6,
+    updated_at = now()
+WHERE stripe_customer_id = $1
+RETURNING *;

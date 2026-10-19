@@ -1,0 +1,44 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../api/client";
+
+export interface Subscription {
+  status: string;
+  priceId: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+export const subscriptionKey = ["stripe", "subscription"] as const;
+
+export function useSubscription() {
+  return useQuery({
+    queryKey: subscriptionKey,
+    queryFn: () => api.get<Subscription>("/api/stripe/subscription"),
+  });
+}
+
+// useCheckout redirects to Stripe Checkout. Pass a price ID to override the
+// server's STRIPE_PRICE_ID default.
+export function useCheckout() {
+  return useMutation({
+    mutationFn: (priceId?: string) =>
+      api.post<{ url: string }>("/api/stripe/checkout", priceId ? { priceId } : {}),
+    onSuccess: ({ url }) => {
+      window.location.href = url;
+    },
+  });
+}
+
+// usePortal redirects to the Stripe billing portal (manage plan, payment
+// method, cancellation).
+export function usePortal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ url: string }>("/api/stripe/portal", {}),
+    onSuccess: ({ url }) => {
+      // The portal can change the subscription; refetch on return.
+      queryClient.invalidateQueries({ queryKey: subscriptionKey });
+      window.location.href = url;
+    },
+  });
+}

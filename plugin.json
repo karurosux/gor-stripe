@@ -1,0 +1,22 @@
+{
+  "name": "stripe",
+  "description": "Stripe subscriptions: Checkout, billing portal, webhook sync, and paid-feature middleware (requires gor g auth)",
+  "files": [
+    {"template": "templates/migration.sql.tmpl", "path": "migrations/{{timestamp}}_create_subscriptions.sql"},
+    {"template": "templates/queries.sql.tmpl", "path": "queries/subscriptions.sql"},
+    {"template": "templates/stripe.go.tmpl", "path": "internal/stripe/stripe.go"},
+    {"template": "templates/middleware.go.tmpl", "path": "internal/stripe/middleware.go"},
+    {"template": "templates/billing_api.ts.tmpl", "path": "web/src/features/billing/api.ts", "delims": "square"},
+    {"template": "templates/BillingPage.tsx.tmpl", "path": "web/src/features/billing/BillingPage.tsx", "delims": "square"}
+  ],
+  "injections": [
+    {"file": "internal/routes/routes.go", "marker": "// gor:imports", "snippet": "templates/routes_import.snippet"},
+    {"file": "internal/routes/routes.go", "marker": "// gor:routes", "snippet": "templates/routes_register.snippet"},
+    {"file": "web/src/routes.tsx", "marker": "// gor:imports", "snippet": "templates/web_imports.snippet"},
+    {"file": "web/src/routes.tsx", "marker": "{/* gor:protected-routes */}", "snippet": "templates/web_routes.snippet"},
+    {"file": "web/src/App.tsx", "marker": "{/* gor:nav */}", "snippet": "templates/web_nav.snippet"}
+  ],
+  "env": {"sentinel": "STRIPE_SECRET_KEY", "file": "templates/env.tmpl"},
+  "postRun": ["sqlc"],
+  "message": "stripe installed.\n\nNext:\n  1. gor db migrate\n  2. Fill STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID in .env\n  3. Dev webhooks: stripe listen --forward-to localhost:8080/api/stripe/webhook\n\nGate paid routes:\n  paid := api.Group(\"\", auth.Require, stripe.RequireSubscription(q))"
+}

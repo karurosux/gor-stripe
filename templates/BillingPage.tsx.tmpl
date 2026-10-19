@@ -1,0 +1,60 @@
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCheckout, usePortal, useSubscription } from "./api";
+
+const ACTIVE_STATUSES = ["active", "trialing"];
+
+export function BillingPage() {
+  const { data: sub, isLoading } = useSubscription();
+  const checkout = useCheckout();
+  const portal = usePortal();
+
+  if (isLoading) {
+    return <p className="text-muted-foreground">Loading…</p>;
+  }
+  if (!sub) {
+    return <p className="text-destructive">Could not load billing status.</p>;
+  }
+
+  const active = ACTIVE_STATUSES.includes(sub.status);
+
+  return (
+    <Card className="mx-auto max-w-md">
+      <CardHeader>
+        <CardTitle>Billing</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          {sub.status === "none"
+            ? "You don't have a subscription yet."
+            : `Your subscription is ${sub.status}.`}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {sub.currentPeriodEnd && (
+          <p className="text-sm text-muted-foreground">
+            {sub.cancelAtPeriodEnd ? "Ends" : "Renews"} on{" "}
+            {new Date(sub.currentPeriodEnd).toLocaleDateString()}
+          </p>
+        )}
+        <div className="flex gap-3">
+          {!active && (
+            <Button
+              onClick={() => checkout.mutate(undefined)}
+              disabled={checkout.isPending}
+            >
+              {checkout.isPending ? "Redirecting…" : "Subscribe"}
+            </Button>
+          )}
+          {sub.status !== "none" && (
+            <Button
+              variant="outline"
+              onClick={() => portal.mutate()}
+              disabled={portal.isPending}
+            >
+              Manage billing
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

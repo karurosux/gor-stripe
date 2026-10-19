@@ -1,0 +1,21 @@
+-- +goose Up
+-- One subscriptions row per user: created alongside the Stripe customer and
+-- kept in sync by the /api/stripe/webhook handler.
+-- uuidv7() needs Postgres 18+; on older Postgres use gen_random_uuid().
+CREATE TABLE subscriptions (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    user_id uuid NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
+    stripe_customer_id text NOT NULL UNIQUE,
+    stripe_subscription_id text UNIQUE,
+    -- Stripe statuses (active, trialing, past_due, canceled, ...) plus
+    -- 'none' before the first checkout completes.
+    status text NOT NULL DEFAULT 'none',
+    price_id text,
+    current_period_end timestamptz,
+    cancel_at_period_end boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- +goose Down
+DROP TABLE subscriptions;
